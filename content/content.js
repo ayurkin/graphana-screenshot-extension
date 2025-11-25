@@ -26,6 +26,7 @@
   let monitoringStarted = false;
   let lastPanelSignature = '';
   let html2canvasReadyPromise = null;
+  let positionTrackerId = null;
 
   // Detect all panels on the page
   function detectPanels() {
@@ -199,6 +200,7 @@
 
     // Highlight all panels
     refreshPanelsAndHighlights({ emitUpdate: false, force: true });
+    startPositionTracker();
   }
 
   function renderHighlights(panels) {
@@ -313,6 +315,7 @@
     selectionMode = false;
     selectedPanels.clear();
     cachedPanelElements.clear();
+    stopPositionTracker();
 
     if (overlayContainer) {
       overlayContainer.remove();
@@ -359,6 +362,28 @@
         overlayContainer.style.display = '';
       }
     }, 500);
+  }
+
+  function startPositionTracker() {
+    if (positionTrackerId) return;
+
+    const step = () => {
+      if (!overlayContainer) {
+        positionTrackerId = null;
+        return;
+      }
+      updateHighlightPositions();
+      positionTrackerId = requestAnimationFrame(step);
+    };
+
+    positionTrackerId = requestAnimationFrame(step);
+  }
+
+  function stopPositionTracker() {
+    if (positionTrackerId) {
+      cancelAnimationFrame(positionTrackerId);
+      positionTrackerId = null;
+    }
   }
 
   // Listen for messages from popup/background

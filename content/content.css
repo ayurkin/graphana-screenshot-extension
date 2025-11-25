@@ -97,7 +97,6 @@ body.gss-selection-mode {
   background: rgba(137, 180, 250, 0.1);
   cursor: pointer;
   pointer-events: auto;
-  transition: all 0.2s ease;
   box-sizing: border-box;
 }
 

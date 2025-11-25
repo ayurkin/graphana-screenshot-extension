@@ -5,6 +5,8 @@ document.addEventListener('DOMContentLoaded', init);
 let panels = [];
 let selectedPanels = new Set();
 let currentTabId = null;
+let searchTerm = '';
+let lastDashboard = null;
 
 chrome.runtime.onMessage.addListener((message, sender) => {
   if (message.action !== 'panelsUpdated') return;
@@ -12,13 +14,14 @@ chrome.runtime.onMessage.addListener((message, sender) => {
 
   panels = message.panels || [];
   pruneSelection();
+  lastDashboard = message.dashboard || lastDashboard;
 
   if (!panels.length) {
     showNoPanels();
     return;
   }
 
-  renderPanelList(message.dashboard);
+  renderPanelList();
 });
 
 async function init() {
@@ -32,6 +35,10 @@ async function init() {
   document.getElementById('clearAllBtn').addEventListener('click', clearAll);
   document.getElementById('visualModeBtn').addEventListener('click', enterVisualMode);
   document.getElementById('captureBtn').addEventListener('click', captureSelected);
+  document.getElementById('searchInput').addEventListener('input', (e) => {
+    searchTerm = e.target.value.trim().toLowerCase();
+    renderPanelList();
+  });
 
   // Load panels
   await loadPanels();
@@ -47,7 +54,8 @@ async function loadPanels() {
     if (response && response.panels && response.panels.length > 0) {
       panels = response.panels;
       pruneSelection();
-      renderPanelList(response.dashboard);
+      lastDashboard = response.dashboard || null;
+      renderPanelList();
     } else {
       showNoPanels();
     }
@@ -114,16 +122,28 @@ function showCapturing() {
 
 function renderPanelList(dashboard) {
   showContent();
+  const dash = dashboard || lastDashboard;
 
   // Update dashboard info
-  document.getElementById('dashboardTitle').textContent = dashboard?.title || 'Dashboard';
+  document.getElementById('dashboardTitle').textContent = dash?.title || 'Dashboard';
   document.getElementById('panelCount').textContent = `${panels.length} panels`;
 
+  const filtered = getFilteredPanels();
   // Render panel list
   const listEl = document.getElementById('panelList');
   listEl.innerHTML = '';
 
-  panels.forEach(panel => {
+  if (!filtered.length) {
+    const empty = document.createElement('div');
+    empty.className = 'message';
+    empty.style.padding = '16px';
+    empty.innerHTML = '<p>No matching panels</p><span>Adjust your search to see panels</span>';
+    listEl.appendChild(empty);
+    updateCaptureButton();
+    return;
+  }
+
+  filtered.forEach(panel => {
     const item = document.createElement('div');
     item.className = 'panel-item';
     item.dataset.panelId = panel.id;
@@ -192,6 +212,15 @@ function pruneSelection() {
   if (selectedPanels.size !== before) {
     syncSelectionWithContent();
   }
+}
+
+function getFilteredPanels() {
+  if (!searchTerm) return panels;
+  return panels.filter(p => {
+    const title = (p.title || '').toLowerCase();
+    const id = String(p.id || '').toLowerCase();
+    return title.includes(searchTerm) || id.includes(searchTerm);
+  });
 }
 
 function updateCaptureButton() {
