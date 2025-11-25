@@ -5,6 +5,18 @@ document.addEventListener('DOMContentLoaded', init);
 const DEFAULT_COLLAGE_SIZE = 1;
 const DEFAULT_OUTPUT_MODE = 'disk';
 const DEFAULT_SINGLE_COLLAGE = false;
+const DEFAULT_PROCESSING = {
+  resizeEnabled: false,
+  maxWidth: 1600,
+  resizeMode: 'maxWidth', // 'maxWidth' | 'percent'
+  percent: 100,
+  compressEnabled: false,
+  quality: 0.75
+};
+const DEFAULT_IGNORE = {
+  enabled: false,
+  patterns: ''
+};
 const ZIP_FILENAME = 'grafana_collages.zip';
 
 let panels = [];
@@ -15,6 +27,9 @@ let lastDashboard = null;
 let collageSize = DEFAULT_COLLAGE_SIZE;
 let outputMode = DEFAULT_OUTPUT_MODE;
 let forceSingleCollage = DEFAULT_SINGLE_COLLAGE;
+let processingConfig = { ...DEFAULT_PROCESSING };
+let currentTab = 'select';
+let ignoreConfig = { ...DEFAULT_IGNORE };
 
 chrome.runtime.onMessage.addListener((message, sender) => {
   if (message.action !== 'panelsUpdated') return;
@@ -60,6 +75,39 @@ async function init() {
   document.getElementById('singleCollage').addEventListener('change', async (e) => {
     await saveSingleCollage(e.target.checked);
   });
+  document.getElementById('resizeEnabled').addEventListener('change', async (e) => {
+    await saveProcessing({ resizeEnabled: e.target.checked });
+  });
+  document.getElementById('processingMaxWidth').addEventListener('change', async (e) => {
+    await saveProcessing({ maxWidth: e.target.value });
+  });
+  document.getElementById('processingPercent').addEventListener('change', async (e) => {
+    await saveProcessing({ percent: e.target.value, resizeMode: 'percent' });
+  });
+  document.querySelectorAll('input[name="resizeMode"]').forEach(input => {
+    input.addEventListener('change', async (e) => {
+      if (e.target.checked) {
+        await saveProcessing({ resizeMode: e.target.value });
+      }
+    });
+  });
+  document.getElementById('compressEnabled').addEventListener('change', async (e) => {
+    await saveProcessing({ compressEnabled: e.target.checked });
+  });
+  document.getElementById('processingQuality').addEventListener('change', async (e) => {
+    await saveProcessing({ quality: e.target.value });
+  });
+  document.getElementById('ignoreEnabled').addEventListener('change', async (e) => {
+    await saveIgnore({ enabled: e.target.checked });
+    renderPanelList();
+  });
+  document.getElementById('ignorePatterns').addEventListener('input', async (e) => {
+    await saveIgnore({ patterns: e.target.value });
+    renderPanelList();
+  });
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => setTab(btn.dataset.tab));
+  });
 
   collageSize = await loadCollageSize();
   document.getElementById('collageInput').value = collageSize;
@@ -68,9 +116,25 @@ async function init() {
   if (current) current.checked = true;
   forceSingleCollage = await loadSingleCollage();
   document.getElementById('singleCollage').checked = forceSingleCollage;
+  processingConfig = await loadProcessing();
+  applyProcessingToInputs(processingConfig);
+  ignoreConfig = await loadIgnore();
+  applyIgnoreToInputs(ignoreConfig);
+  setTab('select');
 
   // Load panels
   await loadPanels();
+}
+
+function setTab(tab) {
+  currentTab = tab === 'settings' ? 'settings' : 'select';
+  const selectionPane = document.getElementById('selectionPane');
+  const settingsPane = document.getElementById('settingsPane');
+  if (selectionPane) selectionPane.style.display = currentTab === 'select' ? 'block' : 'none';
+  if (settingsPane) settingsPane.style.display = currentTab === 'settings' ? 'block' : 'none';
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === currentTab);
+  });
 }
 
 async function loadPanels() {
@@ -118,6 +182,7 @@ function showContent() {
   document.getElementById('notGrafana').style.display = 'none';
   document.getElementById('noPanels').style.display = 'none';
   document.getElementById('capturing').style.display = 'none';
+  setTab(currentTab);
 }
 
 function showNotGrafana() {
@@ -244,11 +309,23 @@ function pruneSelection() {
 }
 
 function getFilteredPanels() {
-  if (!searchTerm) return panels;
   return panels.filter(p => {
     const title = (p.title || '').toLowerCase();
     const id = String(p.id || '').toLowerCase();
-    return title.includes(searchTerm) || id.includes(searchTerm);
+    const matchesSearch = !searchTerm || title.includes(searchTerm) || id.includes(searchTerm);
+    if (!matchesSearch) return false;
+
+    if (ignoreConfig.enabled && ignoreConfig.patterns) {
+      const patterns = ignoreConfig.patterns
+        .split('|')
+        .map(s => s.trim().toLowerCase())
+        .filter(Boolean);
+      if (patterns.length > 0 && patterns.some(pat => title.includes(pat) || id.includes(pat))) {
+        return false;
+      }
+    }
+
+    return true;
   });
 }
 
@@ -259,7 +336,7 @@ function updateCaptureButton() {
   btn.disabled = count === 0;
   btn.querySelector('span').textContent = count > 0
     ? `Capture Selected (${count})`
-    : 'Capture Selected';
+    : 'Capture';
 }
 
 async function syncSelectionWithContent() {
@@ -304,10 +381,15 @@ async function captureSelected() {
       if (!valid.length) throw new Error('No results returned');
 
       progressEl.textContent = outputMode === 'clipboard' ? 'Preparing clipboard...' : 'Building collages...';
-      const collages = await buildCollages(valid, {
+      const processed = await processImages(valid, processingConfig);
+      const outputFormat = processingConfig.compressEnabled ? 'image/jpeg' : 'image/png';
+      const outputQuality = processingConfig.compressEnabled ? processingConfig.quality : 0.92;
+      const collages = await buildCollages(processed, {
         collageSize,
         dashboard: lastDashboard,
-        forceSingleCollage
+        forceSingleCollage,
+        format: outputFormat,
+        quality: outputQuality
       });
 
       if (outputMode === 'clipboard') {
@@ -467,6 +549,97 @@ async function saveSingleCollage(value) {
   }
 }
 
+async function loadIgnore() {
+  try {
+    const stored = await chrome.storage.sync.get({ ignoreConfig: DEFAULT_IGNORE });
+    return normalizeIgnore(stored.ignoreConfig);
+  } catch (error) {
+    return { ...DEFAULT_IGNORE };
+  }
+}
+
+async function saveIgnore(partial) {
+  ignoreConfig = normalizeIgnore({ ...ignoreConfig, ...partial });
+  applyIgnoreToInputs(ignoreConfig);
+  try {
+    await chrome.storage.sync.set({ ignoreConfig });
+  } catch (error) {
+    // Ignore storage errors silently
+  }
+}
+
+function normalizeIgnore(config) {
+  const enabled = Boolean(config?.enabled);
+  const patterns = (config?.patterns || '').toString();
+  return { enabled, patterns };
+}
+
+function applyIgnoreToInputs(config) {
+  const enabledInput = document.getElementById('ignoreEnabled');
+  const patternsInput = document.getElementById('ignorePatterns');
+  if (enabledInput) enabledInput.checked = config.enabled;
+  if (patternsInput) patternsInput.value = config.patterns || '';
+}
+
+async function loadProcessing() {
+  try {
+    const stored = await chrome.storage.sync.get({ processingConfig: DEFAULT_PROCESSING });
+    return normalizeProcessing(stored.processingConfig);
+  } catch (error) {
+    return { ...DEFAULT_PROCESSING };
+  }
+}
+
+async function saveProcessing(partial) {
+  processingConfig = normalizeProcessing({ ...processingConfig, ...partial });
+  applyProcessingToInputs(processingConfig);
+  try {
+    await chrome.storage.sync.set({ processingConfig });
+  } catch (error) {
+    // Ignore storage errors silently
+  }
+}
+
+function normalizeProcessing(config) {
+  const resizeEnabled = Boolean(config?.resizeEnabled);
+  let maxWidth = parseInt(config?.maxWidth, 10);
+  if (!Number.isFinite(maxWidth) || maxWidth < 200) maxWidth = DEFAULT_PROCESSING.maxWidth;
+  if (maxWidth > 4000) maxWidth = 4000;
+  const resizeMode = ['maxWidth', 'percent'].includes(config?.resizeMode) ? config.resizeMode : DEFAULT_PROCESSING.resizeMode;
+  let percent = parseInt(config?.percent, 10);
+  if (!Number.isFinite(percent) || percent < 10) percent = DEFAULT_PROCESSING.percent;
+  if (percent > 200) percent = 200;
+  const compressEnabled = Boolean(config?.compressEnabled);
+  let quality = parseFloat(config?.quality);
+  if (!Number.isFinite(quality) || quality <= 0 || quality > 1) quality = DEFAULT_PROCESSING.quality;
+
+  return { resizeEnabled, maxWidth, resizeMode, percent, compressEnabled, quality };
+}
+
+function applyProcessingToInputs(config) {
+  const resizeInput = document.getElementById('resizeEnabled');
+  const compressInput = document.getElementById('compressEnabled');
+  const maxWidthInput = document.getElementById('processingMaxWidth');
+  const percentInput = document.getElementById('processingPercent');
+  const qualityInput = document.getElementById('processingQuality');
+  const modeRadio = document.querySelector(`input[name="resizeMode"][value="${config.resizeMode}"]`);
+  if (resizeInput) resizeInput.checked = config.resizeEnabled;
+  if (compressInput) compressInput.checked = config.compressEnabled;
+  if (maxWidthInput) {
+    maxWidthInput.value = config.maxWidth;
+    maxWidthInput.disabled = !config.resizeEnabled || config.resizeMode !== 'maxWidth';
+  }
+  if (percentInput) {
+    percentInput.value = config.percent;
+    percentInput.disabled = !config.resizeEnabled || config.resizeMode !== 'percent';
+  }
+  if (modeRadio) modeRadio.checked = true;
+  if (qualityInput) {
+    qualityInput.value = config.quality;
+    qualityInput.disabled = !config.compressEnabled;
+  }
+}
+
 async function copyCollagesToClipboard(collages) {
   if (!navigator.clipboard || !navigator.clipboard.write) {
     throw new Error('Clipboard API not available');
@@ -564,7 +737,7 @@ function loadImage(dataUrl) {
   });
 }
 
-async function buildCollages(results, { collageSize, dashboard, forceSingleCollage }) {
+async function buildCollages(results, { collageSize, dashboard, forceSingleCollage, format = 'image/png', quality = 0.92 }) {
   const size = Math.max(1, collageSize || 1);
   const groups = [];
   const step = forceSingleCollage ? results.length : size;
@@ -597,7 +770,7 @@ async function buildCollages(results, { collageSize, dashboard, forceSingleColla
       y += img.height + padding;
     });
 
-    const dataUrl = canvas.toDataURL('image/png');
+    const dataUrl = canvas.toDataURL(format, quality);
     return {
       dataUrl,
       index,
@@ -607,7 +780,7 @@ async function buildCollages(results, { collageSize, dashboard, forceSingleColla
   }));
 }
 
-async function mergeCollagesIntoOne(collages) {
+async function mergeCollagesIntoOne(collages, { format = 'image/png', quality = 0.92 } = {}) {
   const images = await Promise.all(collages.map(c => loadImage(c.dataUrl)));
   const maxWidth = Math.max(...images.map(img => img.width));
   const totalHeight = images.reduce((sum, img) => sum + img.height, 0);
@@ -631,11 +804,45 @@ async function mergeCollagesIntoOne(collages) {
   });
 
   return {
-    dataUrl: canvas.toDataURL('image/png'),
+    dataUrl: canvas.toDataURL(format, quality),
     index: 0,
     total: 1,
     title: collages[0]?.title || 'Grafana'
   };
+}
+
+async function processImages(results, config) {
+  if (!config.resizeEnabled && !config.compressEnabled) return results;
+
+  return Promise.all(results.map(async (result) => {
+    try {
+      const img = await loadImage(result.dataUrl);
+      let width = img.width;
+      let height = img.height;
+      if (config.resizeEnabled) {
+        let scale = 1;
+        if (config.resizeMode === 'percent') {
+          scale = Math.min(2, Math.max(0.1, config.percent / 100));
+        } else if (config.maxWidth > 0) {
+          scale = Math.min(1, config.maxWidth / img.width);
+        }
+        width = Math.round(img.width * scale);
+        height = Math.round(img.height * scale);
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      const format = config.compressEnabled ? 'image/jpeg' : 'image/png';
+      const quality = config.compressEnabled ? config.quality : 0.92;
+      const dataUrl = canvas.toDataURL(format, quality);
+      return { ...result, dataUrl };
+    } catch (error) {
+      return result;
+    }
+  }));
 }
 
 function createZip(files) {
