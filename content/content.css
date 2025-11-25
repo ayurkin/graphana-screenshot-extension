@@ -1,0 +1,165 @@
+/* Grafana Panel Screenshot - Content Styles */
+
+/* Selection mode - dim the page slightly */
+body.gss-selection-mode {
+  cursor: crosshair !important;
+}
+
+/* Overlay container */
+#grafana-screenshot-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+/* Toolbar */
+.gss-toolbar {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e1e2e;
+  border: 1px solid #45475a;
+  border-radius: 8px;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
+  z-index: 10002;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.gss-title {
+  color: #cdd6f4;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.gss-count {
+  color: #a6adc8;
+  font-size: 13px;
+  padding: 4px 8px;
+  background: #313244;
+  border-radius: 4px;
+}
+
+.gss-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.gss-capture-btn {
+  background: #89b4fa;
+  color: #1e1e2e;
+}
+
+.gss-capture-btn:hover:not(:disabled) {
+  background: #b4befe;
+}
+
+.gss-capture-btn:disabled {
+  background: #45475a;
+  color: #6c7086;
+  cursor: not-allowed;
+}
+
+.gss-cancel-btn {
+  background: #45475a;
+  color: #cdd6f4;
+}
+
+.gss-cancel-btn:hover {
+  background: #585b70;
+}
+
+/* Panel highlight overlay */
+.gss-panel-highlight {
+  border: 2px dashed #89b4fa;
+  background: rgba(137, 180, 250, 0.1);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.gss-panel-highlight:hover {
+  border-color: #b4befe;
+  background: rgba(180, 190, 254, 0.2);
+}
+
+.gss-panel-highlight.selected {
+  border: 3px solid #a6e3a1;
+  background: rgba(166, 227, 161, 0.15);
+}
+
+.gss-panel-highlight.selected::after {
+  content: '✓';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  background: #a6e3a1;
+  color: #1e1e2e;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+/* Panel title tooltip on hover */
+.gss-panel-highlight::before {
+  content: attr(title);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e1e2e;
+  color: #cdd6f4;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  margin-bottom: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.gss-panel-highlight:hover::before {
+  opacity: 1;
+}
+
+/* Capturing state */
+.gss-capturing {
+  pointer-events: none;
+}
+
+.gss-capturing .gss-toolbar::after {
+  content: 'Capturing...';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 8px;
+  background: #f9e2af;
+  color: #1e1e2e;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}

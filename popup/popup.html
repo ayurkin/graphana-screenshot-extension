@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grafana Panel Screenshot</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1>Grafana Panels</h1>
+      <div class="header-actions">
+        <button id="refreshBtn" class="icon-btn" title="Refresh panels">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 4v6h-6M1 20v-6h6"/>
+            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <div id="loading" class="loading">
+      <div class="spinner"></div>
+      <span>Loading panels...</span>
+    </div>
+
+    <div id="notGrafana" class="message" style="display: none;">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 8v4M12 16h.01"/>
+      </svg>
+      <p>Not a Grafana page</p>
+      <span>Navigate to a Grafana dashboard to use this extension</span>
+    </div>
+
+    <div id="noPanels" class="message" style="display: none;">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+        <path d="M3 9h18M9 21V9"/>
+      </svg>
+      <p>No panels found</p>
+      <span>This dashboard doesn't have any detectable panels</span>
+    </div>
+
+    <div id="content" style="display: none;">
+      <div class="dashboard-info">
+        <span id="dashboardTitle" class="dashboard-title"></span>
+        <span id="panelCount" class="panel-count"></span>
+      </div>
+
+      <div class="actions-bar">
+        <button id="selectAllBtn" class="btn btn-sm">Select All</button>
+        <button id="clearAllBtn" class="btn btn-sm">Clear</button>
+        <button id="visualModeBtn" class="btn btn-sm btn-secondary">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+          Visual Select
+        </button>
+      </div>
+
+      <div id="panelList" class="panel-list"></div>
+
+      <div class="footer">
+        <button id="captureBtn" class="btn btn-primary btn-block" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+          <span>Capture Selected</span>
+        </button>
+      </div>
+    </div>
+
+    <div id="capturing" class="capturing" style="display: none;">
+      <div class="spinner"></div>
+      <span id="captureProgress">Capturing panels...</span>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
