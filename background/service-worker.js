@@ -23,7 +23,7 @@ async function downloadFile(dataUrl, filename) {
     chrome.downloads.download({
       url: dataUrl,
       filename: filename,
-      saveAs: true
+      saveAs: false
     }, (downloadId) => {
       if (chrome.runtime.lastError) {
         reject(new Error(chrome.runtime.lastError.message));

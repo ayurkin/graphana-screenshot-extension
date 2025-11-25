@@ -49,33 +49,103 @@
         <span id="panelCount" class="panel-count"></span>
       </div>
 
-      <div class="search-bar">
-        <input id="searchInput" type="text" placeholder="Search panels by title or ID" autocomplete="off" />
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="select">Select</button>
+        <button class="tab-btn" data-tab="settings">Settings</button>
       </div>
 
-      <div class="actions-bar">
-        <button id="selectAllBtn" class="btn btn-sm">Select All</button>
-        <button id="clearAllBtn" class="btn btn-sm">Clear</button>
-        <button id="visualModeBtn" class="btn btn-sm btn-secondary">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-            <circle cx="12" cy="12" r="3"/>
-          </svg>
-          Visual Select
-        </button>
+      <div id="selectionPane">
+        <div class="search-bar">
+          <input id="searchInput" type="text" placeholder="Search panels by title or ID" autocomplete="off" />
+        </div>
+
+        <div class="actions-bar">
+          <button id="selectAllBtn" class="btn btn-sm">Select All</button>
+          <button id="clearAllBtn" class="btn btn-sm">Clear</button>
+          <button id="visualModeBtn" class="btn btn-sm btn-secondary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            Visual Select
+          </button>
+          <button id="captureBtn" class="btn btn-primary btn-sm capture-top" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              <circle cx="8.5" cy="8.5" r="1.5"/>
+              <polyline points="21 15 16 10 5 21"/>
+            </svg>
+            <span>Capture</span>
+          </button>
+        </div>
+
+        <div id="panelList" class="panel-list"></div>
       </div>
 
-      <div id="panelList" class="panel-list"></div>
+      <div id="settingsPane" style="display:none;">
+        <div class="settings-panel">
+          <label for="collageInput">
+            Collage size
+            <span class="hint">(images per saved file)</span>
+          </label>
+          <input id="collageInput" type="number" min="1" max="10" step="1" value="1" inputmode="numeric" />
 
-      <div class="footer">
-        <button id="captureBtn" class="btn btn-primary btn-block" disabled>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-            <circle cx="8.5" cy="8.5" r="1.5"/>
-            <polyline points="21 15 16 10 5 21"/>
-          </svg>
-          <span>Capture Selected</span>
-        </button>
+          <div class="output-mode">
+            <span>Output</span>
+            <label>
+              <input type="radio" name="outputMode" value="disk" checked />
+              Save to disk
+            </label>
+            <label>
+              <input type="radio" name="outputMode" value="clipboard" />
+              Copy to clipboard
+            </label>
+            <label>
+              <input type="checkbox" id="singleCollage" />
+              Force single collage
+            </label>
+          </div>
+
+          <div class="processing">
+            <span class="processing-title">Optimize for LLMs</span>
+            <div class="processing-grid">
+              <label>
+                <span class="processing-toggle">
+                  <input type="checkbox" id="resizeEnabled" />
+                  Resize
+                </span>
+                <div class="resize-modes">
+                  <label>
+                    <input type="radio" name="resizeMode" value="maxWidth" checked />
+                    Max width (px)
+                  </label>
+                  <label>
+                    <input type="radio" name="resizeMode" value="percent" />
+                    Percent (%)
+                  </label>
+                </div>
+                <div class="resize-inputs">
+                  <input id="processingMaxWidth" type="number" min="200" max="4000" step="50" value="1600" inputmode="numeric" />
+                  <input id="processingPercent" type="number" min="10" max="200" step="5" value="100" inputmode="numeric" />
+                </div>
+              </label>
+              <label>
+                <span class="processing-toggle">
+                  <input type="checkbox" id="compressEnabled" />
+                  Compress (0.1 - 1 quality)
+                </span>
+                <input id="processingQuality" type="number" min="0.1" max="1" step="0.05" value="0.75" inputmode="decimal" />
+              </label>
+              <label>
+                <span class="processing-toggle">
+                  <input type="checkbox" id="ignoreEnabled" />
+                  Ignore patterns (title)
+                </span>
+                <input id="ignorePatterns" type="text" placeholder="e.g. panel|graph|cpu" />
+              </label>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
