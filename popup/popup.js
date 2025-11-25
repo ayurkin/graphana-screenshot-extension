@@ -6,6 +6,21 @@ let panels = [];
 let selectedPanels = new Set();
 let currentTabId = null;
 
+chrome.runtime.onMessage.addListener((message, sender) => {
+  if (message.action !== 'panelsUpdated') return;
+  if (!currentTabId || !sender?.tab || sender.tab.id !== currentTabId) return;
+
+  panels = message.panels || [];
+  pruneSelection();
+
+  if (!panels.length) {
+    showNoPanels();
+    return;
+  }
+
+  renderPanelList(message.dashboard);
+});
+
 async function init() {
   // Get current tab
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -31,12 +46,21 @@ async function loadPanels() {
 
     if (response && response.panels && response.panels.length > 0) {
       panels = response.panels;
+      pruneSelection();
       renderPanelList(response.dashboard);
     } else {
       showNoPanels();
     }
   } catch (error) {
     console.error('Error loading panels:', error);
+    const detail = document.getElementById('notGrafanaDetail');
+    if (detail) {
+      if (String(error).includes('Could not establish connection')) {
+        detail.textContent = 'Enable file access or reload the page so the content script can attach.';
+      } else {
+        detail.textContent = 'Unable to reach the page content. Reload the dashboard and try again.';
+      }
+    }
     // Content script might not be loaded - try to check if it's a grafana page
     showNotGrafana();
   }
@@ -65,6 +89,11 @@ function showNotGrafana() {
   document.getElementById('notGrafana').style.display = 'flex';
   document.getElementById('noPanels').style.display = 'none';
   document.getElementById('capturing').style.display = 'none';
+
+  const detail = document.getElementById('notGrafanaDetail');
+  if (detail) {
+    detail.textContent = 'Enable file access for this extension or open a Grafana dashboard/test page.';
+  }
 }
 
 function showNoPanels() {
@@ -109,6 +138,10 @@ function renderPanelList(dashboard) {
       <span class="panel-id">#${panel.id}</span>
     `;
 
+    if (selectedPanels.has(panel.id)) {
+      item.classList.add('selected');
+    }
+
     item.addEventListener('click', () => togglePanel(panel.id, item));
     listEl.appendChild(item);
   });
@@ -149,6 +182,16 @@ function clearAll() {
 
   updateCaptureButton();
   syncSelectionWithContent();
+}
+
+function pruneSelection() {
+  const ids = new Set(panels.map(p => p.id));
+  const before = selectedPanels.size;
+  selectedPanels = new Set([...selectedPanels].filter(id => ids.has(id)));
+
+  if (selectedPanels.size !== before) {
+    syncSelectionWithContent();
+  }
 }
 
 function updateCaptureButton() {

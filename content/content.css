@@ -16,6 +16,13 @@ body.gss-selection-mode {
   pointer-events: none;
 }
 
+.gss-highlight-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10001;
+}
+
 /* Toolbar */
 .gss-toolbar {
   position: fixed;
@@ -85,6 +92,7 @@ body.gss-selection-mode {
 
 /* Panel highlight overlay */
 .gss-panel-highlight {
+  position: absolute;
   border: 2px dashed #89b4fa;
   background: rgba(137, 180, 250, 0.1);
   cursor: pointer;

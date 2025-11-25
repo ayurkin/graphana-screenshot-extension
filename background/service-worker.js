@@ -54,6 +54,8 @@ async function handleCaptureRequest(message, tab) {
         const filename = sanitizeFilename(`${panel.title}_${timestamp}.png`);
 
         await downloadFile(response.dataUrl, filename);
+      } else if (response && response.error) {
+        console.error(`Capture error for panel ${panel.id}:`, response.error);
       }
     } catch (error) {
       console.error(`Error capturing panel ${panel.id}:`, error);
