@@ -65,6 +65,30 @@
         </button>
       </div>
 
+      <div class="settings-panel">
+        <label for="collageInput">
+          Collage size
+          <span class="hint">(images per saved file)</span>
+        </label>
+        <input id="collageInput" type="number" min="1" max="10" step="1" value="1" inputmode="numeric" />
+
+        <div class="output-mode">
+          <span>Output</span>
+          <label>
+            <input type="radio" name="outputMode" value="disk" checked />
+            Save to disk
+          </label>
+          <label>
+            <input type="radio" name="outputMode" value="clipboard" />
+            Copy to clipboard
+          </label>
+          <label>
+            <input type="checkbox" id="singleCollage" />
+            Force single collage
+          </label>
+        </div>
+      </div>
+
       <div id="panelList" class="panel-list"></div>
 
       <div class="footer">
