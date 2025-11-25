@@ -141,6 +141,28 @@ body {
   border-radius: 10px;
 }
 
+.search-bar {
+  padding: 8px 16px 0;
+  background: #1e1e2e;
+}
+
+.search-bar input {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #313244;
+  background: #181825;
+  color: #cdd6f4;
+  font-size: 12px;
+  outline: none;
+  transition: border 0.15s ease, background 0.15s ease;
+}
+
+.search-bar input:focus {
+  border-color: #89b4fa;
+  background: #1e1e2e;
+}
+
 /* Actions bar */
 .actions-bar {
   display: flex;

@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grafana Panel Screenshot - Test Dashboard</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+    }
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      line-height: 1.4;
+    }
+    h1 {
+      margin: 0 0 8px;
+    }
+    .subhead {
+      margin: 0 0 24px;
+      color: #94a3b8;
+    }
+    .controls {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    button {
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      background: #1e293b;
+      color: #e2e8f0;
+      cursor: pointer;
+      transition: background 0.15s ease, border 0.15s ease;
+    }
+    button:hover {
+      background: #273449;
+      border-color: #475569;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .panel-card,
+    .legacy-panel {
+      min-height: 180px;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      background: #111827;
+      padding: 12px 12px 18px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #e2e8f0;
+      margin-bottom: 10px;
+    }
+    h6,
+    .panel-title-text {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .sparkline {
+      height: 3px;
+      width: 100%;
+      background: linear-gradient(90deg, #22c55e, #06b6d4, #3b82f6);
+      border-radius: 999px;
+      margin: 12px 0;
+      opacity: 0.7;
+    }
+    .stats {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .stat {
+      background: #0b1220;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid #1e293b;
+      min-width: 120px;
+    }
+    .legacy-section {
+      margin-top: 12px;
+      border-top: 1px solid #1f2937;
+      padding-top: 16px;
+    }
+  </style>
+</head>
+<body>
+  <h1 data-testid="dashboard-title">Test Grafana-like Dashboard</h1>
+  <p class="subhead">Use this page to manually test selection mode, scrolling, and popup updates without a live Grafana instance.</p>
+
+  <div class="controls">
+    <button id="add-modern">Add modern panel</button>
+    <button id="add-legacy">Add legacy panel</button>
+    <button id="add-batch">Add 5 panels (auto-scroll near bottom to trigger)</button>
+  </div>
+
+  <div id="modern-grid" class="grid"></div>
+
+  <div class="legacy-section">
+    <h2>Legacy-style panels</h2>
+    <div id="legacy-grid" class="grid"></div>
+  </div>
+
+  <script>
+    const modernGrid = document.getElementById('modern-grid');
+    const legacyGrid = document.getElementById('legacy-grid');
+    let modernCounter = 1100;
+    let legacyCounter = 2100;
+
+    function randomValue() {
+      return (Math.random() * 100).toFixed(2);
+    }
+
+    function createModernPanel(id) {
+      const card = document.createElement('div');
+      card.className = 'panel-card';
+      card.setAttribute('data-panelid', id);
+
+      const header = document.createElement('div');
+      header.className = 'panel-header';
+      const title = document.createElement('h6');
+      title.setAttribute('data-testid', `panel-title-${id}`);
+      title.textContent = `Modern Panel ${id}`;
+      header.appendChild(title);
+
+      const badge = document.createElement('span');
+      badge.textContent = 'Live';
+      badge.style.background = '#22c55e33';
+      badge.style.border = '1px solid #16a34a';
+      badge.style.padding = '4px 8px';
+      badge.style.borderRadius = '999px';
+      badge.style.fontSize = '12px';
+      header.appendChild(badge);
+
+      const spark = document.createElement('div');
+      spark.className = 'sparkline';
+      const stats = document.createElement('div');
+      stats.className = 'stats';
+      stats.innerHTML = `
+        <div class="stat">Min: ${randomValue()}</div>
+        <div class="stat">Avg: ${randomValue()}</div>
+        <div class="stat">Max: ${randomValue()}</div>
+      `;
+
+      card.appendChild(header);
+      card.appendChild(spark);
+      card.appendChild(stats);
+      return card;
+    }
+
+    function createLegacyPanel(id) {
+      const panel = document.createElement('div');
+      panel.className = 'legacy-panel panel-container';
+
+      const title = document.createElement('div');
+      title.className = 'panel-title-text';
+      title.textContent = `Legacy Panel ${id}`;
+
+      const stat = document.createElement('div');
+      stat.className = 'stat';
+      stat.style.marginTop = '12px';
+      stat.textContent = `Value: ${randomValue()}`;
+
+      panel.appendChild(title);
+      panel.appendChild(stat);
+      return panel;
+    }
+
+    function addModernPanels(count = 1) {
+      for (let i = 0; i < count; i++) {
+        modernGrid.appendChild(createModernPanel(modernCounter++));
+      }
+    }
+
+    function addLegacyPanels(count = 1) {
+      for (let i = 0; i < count; i++) {
+        legacyGrid.appendChild(createLegacyPanel(legacyCounter++));
+      }
+    }
+
+    document.getElementById('add-modern').addEventListener('click', () => addModernPanels());
+    document.getElementById('add-legacy').addEventListener('click', () => addLegacyPanels());
+    document.getElementById('add-batch').addEventListener('click', () => addModernPanels(5));
+
+    window.addEventListener('scroll', () => {
+      const nearBottom = window.innerHeight + window.scrollY >= document.body.offsetHeight - 200;
+      if (nearBottom) addModernPanels(2);
+    });
+
+    // Seed initial panels
+    addModernPanels(8);
+    addLegacyPanels(3);
+  </script>
+</body>
+</html>

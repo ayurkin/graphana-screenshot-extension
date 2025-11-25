@@ -18,8 +18,15 @@
   let selectionMode = false;
   let selectedPanels = new Set();
   let overlayContainer = null;
-  let animationFrameId = null;
+  let highlightLayer = null;
   let cachedPanelElements = new Map(); // panelId -> element
+  let positionUpdateScheduled = false;
+  let panelRefreshTimeout = null;
+  let mutationObserver = null;
+  let monitoringStarted = false;
+  let lastPanelSignature = '';
+  let html2canvasReadyPromise = null;
+  let positionTrackerId = null;
 
   // Detect all panels on the page
   function detectPanels() {
@@ -87,6 +94,87 @@
     };
   }
 
+  function ensureMonitoringStarted() {
+    if (monitoringStarted || !isGrafanaPage()) return;
+
+    monitoringStarted = true;
+
+    const handleViewportChange = () => {
+      schedulePositionUpdate();
+      schedulePanelRefresh();
+    };
+
+    window.addEventListener('scroll', handleViewportChange, { passive: true, capture: true });
+    window.addEventListener('resize', handleViewportChange, true);
+
+    mutationObserver = new MutationObserver(() => schedulePanelRefresh());
+    if (document.body) {
+      mutationObserver.observe(document.body, { childList: true, subtree: true });
+    }
+
+    schedulePanelRefresh(true);
+  }
+
+  function schedulePanelRefresh(force = false) {
+    if (!monitoringStarted) return;
+
+    if (force) {
+      refreshPanelsAndHighlights({ force: true });
+      return;
+    }
+
+    if (panelRefreshTimeout) {
+      clearTimeout(panelRefreshTimeout);
+    }
+
+    panelRefreshTimeout = setTimeout(() => {
+      panelRefreshTimeout = null;
+      refreshPanelsAndHighlights({});
+    }, 150);
+  }
+
+  function refreshPanelsAndHighlights({ force = false, emitUpdate = true } = {}) {
+    const panels = detectPanels();
+    const signature = panels.map(p => `${p.id}:${p.title}`).join('|');
+    const unchanged = signature === lastPanelSignature && !force;
+
+    lastPanelSignature = signature;
+    cachedPanelElements.clear();
+    panels.forEach(panel => cachedPanelElements.set(panel.id, panel.element));
+
+    // Drop selections that no longer exist
+    const currentIds = new Set(panels.map(p => p.id));
+    selectedPanels = new Set(Array.from(selectedPanels).filter(id => currentIds.has(id)));
+
+    if (overlayContainer) {
+      if (unchanged) {
+        schedulePositionUpdate();
+      } else {
+        renderHighlights(panels);
+      }
+    }
+
+    if (emitUpdate && !unchanged) {
+      notifyPanelList(panels);
+    }
+
+    return panels;
+  }
+
+  function notifyPanelList(panels) {
+    const dashboard = getDashboardInfo();
+
+    try {
+      chrome.runtime.sendMessage({
+        action: 'panelsUpdated',
+        panels: panels.map(p => ({ id: p.id, title: p.title })),
+        dashboard
+      });
+    } catch (error) {
+      // No listeners available
+    }
+  }
+
   // Create selection overlay
   function createOverlay() {
     if (overlayContainer) return;
@@ -100,92 +188,89 @@
         <button class="gss-btn gss-capture-btn" disabled>Capture</button>
         <button class="gss-btn gss-cancel-btn">Cancel</button>
       </div>
+      <div class="gss-highlight-layer"></div>
     `;
     document.body.appendChild(overlayContainer);
+
+    highlightLayer = overlayContainer.querySelector('.gss-highlight-layer');
 
     // Add event listeners
     overlayContainer.querySelector('.gss-capture-btn').addEventListener('click', captureSelected);
     overlayContainer.querySelector('.gss-cancel-btn').addEventListener('click', exitSelectionMode);
 
     // Highlight all panels
-    highlightPanels();
-
-    // Start continuous position updates (no scroll event interception)
-    startPositionUpdates();
+    refreshPanelsAndHighlights({ emitUpdate: false, force: true });
+    startPositionTracker();
   }
 
-  // Highlight panels for selection
-  function highlightPanels() {
-    const panels = detectPanels();
-    cachedPanelElements.clear();
+  function renderHighlights(panels) {
+    if (!highlightLayer) return;
+
+    highlightLayer.innerHTML = '';
 
     panels.forEach(panel => {
-      // Cache the element for position updates
-      cachedPanelElements.set(panel.id, panel.element);
+      const highlight = createHighlightElement(panel);
+      highlightLayer.appendChild(highlight);
+    });
 
-      const highlight = document.createElement('div');
-      highlight.className = 'gss-panel-highlight';
-      highlight.dataset.panelId = panel.id;
+    updateSelectionCount();
+    schedulePositionUpdate();
+  }
 
-      // Position the highlight
-      const rect = panel.element.getBoundingClientRect();
-      highlight.style.cssText = `
-        position: fixed;
-        top: ${rect.top}px;
-        left: ${rect.left}px;
-        width: ${rect.width}px;
-        height: ${rect.height}px;
-        z-index: 10000;
-      `;
+  function createHighlightElement(panel) {
+    const highlight = document.createElement('div');
+    highlight.className = 'gss-panel-highlight';
+    highlight.dataset.panelId = panel.id;
 
-      // Add panel title tooltip
-      highlight.title = panel.title;
+    const rect = panel.element.getBoundingClientRect();
+    highlight.style.top = `${rect.top}px`;
+    highlight.style.left = `${rect.left}px`;
+    highlight.style.width = `${rect.width}px`;
+    highlight.style.height = `${rect.height}px`;
 
-      // Click handler
-      highlight.addEventListener('click', (e) => {
-        e.stopPropagation();
-        togglePanelSelection(panel.id, highlight);
-      });
+    if (selectedPanels.has(panel.id)) {
+      highlight.classList.add('selected');
+    }
 
-      overlayContainer.appendChild(highlight);
+    // Add panel title tooltip
+    highlight.title = panel.title;
+
+    // Click handler
+    highlight.addEventListener('click', (e) => {
+      e.stopPropagation();
+      togglePanelSelection(panel.id, highlight);
+    });
+
+    return highlight;
+  }
+
+  function schedulePositionUpdate() {
+    if (!overlayContainer || positionUpdateScheduled) return;
+
+    positionUpdateScheduled = true;
+    requestAnimationFrame(() => {
+      positionUpdateScheduled = false;
+      updateHighlightPositions();
     });
   }
 
-  // Start continuous position updates using requestAnimationFrame
-  function startPositionUpdates() {
-    function update() {
-      if (!overlayContainer) {
-        animationFrameId = null;
-        return;
+  function updateHighlightPositions() {
+    if (!overlayContainer) return;
+
+    const highlights = overlayContainer.querySelectorAll('.gss-panel-highlight');
+
+    highlights.forEach(highlight => {
+      const panelId = highlight.dataset.panelId;
+      const element = cachedPanelElements.get(panelId);
+
+      if (element) {
+        const rect = element.getBoundingClientRect();
+        highlight.style.top = `${rect.top}px`;
+        highlight.style.left = `${rect.left}px`;
+        highlight.style.width = `${rect.width}px`;
+        highlight.style.height = `${rect.height}px`;
       }
-
-      const highlights = overlayContainer.querySelectorAll('.gss-panel-highlight');
-
-      highlights.forEach(highlight => {
-        const panelId = highlight.dataset.panelId;
-        const element = cachedPanelElements.get(panelId);
-
-        if (element) {
-          const rect = element.getBoundingClientRect();
-          highlight.style.top = `${rect.top}px`;
-          highlight.style.left = `${rect.left}px`;
-          highlight.style.width = `${rect.width}px`;
-          highlight.style.height = `${rect.height}px`;
-        }
-      });
-
-      animationFrameId = requestAnimationFrame(update);
-    }
-
-    animationFrameId = requestAnimationFrame(update);
-  }
-
-  // Stop position updates
-  function stopPositionUpdates() {
-    if (animationFrameId) {
-      cancelAnimationFrame(animationFrameId);
-      animationFrameId = null;
-    }
+    });
   }
 
   // Toggle panel selection
@@ -203,6 +288,8 @@
 
   // Update selection count in toolbar
   function updateSelectionCount() {
+    if (!overlayContainer) return;
+
     const countEl = overlayContainer.querySelector('.gss-count');
     const captureBtn = overlayContainer.querySelector('.gss-capture-btn');
     const count = selectedPanels.size;
@@ -214,6 +301,9 @@
 
   // Enter selection mode
   function enterSelectionMode() {
+    ensureMonitoringStarted();
+    schedulePanelRefresh(true);
+
     selectionMode = true;
     selectedPanels.clear();
     createOverlay();
@@ -225,14 +315,15 @@
     selectionMode = false;
     selectedPanels.clear();
     cachedPanelElements.clear();
-
-    // Stop position updates
-    stopPositionUpdates();
+    stopPositionTracker();
 
     if (overlayContainer) {
       overlayContainer.remove();
       overlayContainer = null;
     }
+
+    highlightLayer = null;
+    positionUpdateScheduled = false;
 
     document.body.classList.remove('gss-selection-mode');
   }
@@ -241,7 +332,8 @@
   async function captureSelected() {
     if (selectedPanels.size === 0) return;
 
-    const panels = detectPanels().filter(p => selectedPanels.has(p.id));
+    const panels = refreshPanelsAndHighlights({ emitUpdate: false, force: true })
+      .filter(p => selectedPanels.has(p.id));
 
     // Hide overlay temporarily for clean screenshots
     if (overlayContainer) {
@@ -272,11 +364,34 @@
     }, 500);
   }
 
+  function startPositionTracker() {
+    if (positionTrackerId) return;
+
+    const step = () => {
+      if (!overlayContainer) {
+        positionTrackerId = null;
+        return;
+      }
+      updateHighlightPositions();
+      positionTrackerId = requestAnimationFrame(step);
+    };
+
+    positionTrackerId = requestAnimationFrame(step);
+  }
+
+  function stopPositionTracker() {
+    if (positionTrackerId) {
+      cancelAnimationFrame(positionTrackerId);
+      positionTrackerId = null;
+    }
+  }
+
   // Listen for messages from popup/background
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     switch (message.action) {
       case 'getPanels':
-        const panels = detectPanels();
+        ensureMonitoringStarted();
+        const panels = refreshPanelsAndHighlights({ emitUpdate: false, force: true });
         const dashboard = getDashboardInfo();
         sendResponse({
           panels: panels.map(p => ({ id: p.id, title: p.title })),
@@ -294,36 +409,51 @@
         sendResponse({ success: true });
         break;
 
-      case 'capturePanel':
-        // Capture a specific panel by ID
-        const panel = detectPanels().find(p => p.id === message.panelId);
-        if (panel) {
-          capturePanelElement(panel).then(dataUrl => {
-            sendResponse({ dataUrl: dataUrl, title: panel.title });
-          });
-          return true; // Keep channel open for async response
+      case 'capturePanel': {
+        ensureMonitoringStarted();
+        const panel = refreshPanelsAndHighlights({ emitUpdate: false }).find(p => p.id === message.panelId);
+        if (!panel) {
+          sendResponse({ error: 'Panel not found' });
+          break;
         }
-        sendResponse({ error: 'Panel not found' });
-        break;
 
-      case 'capturePanels':
-        // Capture multiple panels by IDs
-        const panelIds = message.panelIds;
-        const allPanels = detectPanels();
+        (async () => {
+          try {
+            const dataUrl = await capturePanelElement(panel);
+            if (!dataUrl) throw new Error('Capture failed');
+            sendResponse({ dataUrl, title: panel.title });
+          } catch (error) {
+            console.error('Error capturing panel:', error);
+            sendResponse({ error: error.message });
+          }
+        })();
+        return true; // Keep channel open for async response
+      }
+
+      case 'capturePanels': {
+        const panelIds = message.panelIds || [];
+        ensureMonitoringStarted();
+        const allPanels = refreshPanelsAndHighlights({ emitUpdate: false });
         const toCapture = allPanels.filter(p => panelIds.includes(p.id));
 
-        Promise.all(toCapture.map(p => capturePanelElement(p)))
-          .then(results => {
-            sendResponse({
-              results: results.map((dataUrl, i) => ({
-                dataUrl: dataUrl,
-                title: toCapture[i].title,
-                id: toCapture[i].id
+        (async () => {
+          try {
+            await ensureHtml2Canvas();
+            const results = await Promise.all(
+              toCapture.map(async p => ({
+                dataUrl: await capturePanelElement(p),
+                title: p.title,
+                id: p.id
               }))
-            });
-          });
+            );
+            sendResponse({ results });
+          } catch (error) {
+            console.error('Error capturing panels:', error);
+            sendResponse({ error: error.message, results: [] });
+          }
+        })();
         return true; // Keep channel open for async response
-        break;
+      }
 
       case 'setSelectedPanels':
         selectedPanels = new Set(message.panelIds);
@@ -347,10 +477,7 @@
 
   // Capture a panel element using html2canvas
   async function capturePanelElement(panel) {
-    // Load html2canvas if not already loaded
-    if (typeof html2canvas === 'undefined') {
-      await loadHtml2Canvas();
-    }
+    await ensureHtml2Canvas();
 
     try {
       const canvas = await html2canvas(panel.element, {
@@ -369,24 +496,19 @@
       return canvas.toDataURL('image/png');
     } catch (error) {
       console.error('Error capturing panel:', error);
-      return null;
+      throw error;
     }
   }
 
-  // Load html2canvas library
-  function loadHtml2Canvas() {
-    return new Promise((resolve, reject) => {
-      if (typeof html2canvas !== 'undefined') {
-        resolve();
-        return;
-      }
+  // Load html2canvas library with single-flight semantics
+  function ensureHtml2Canvas() {
+    if (typeof html2canvas !== 'undefined') return Promise.resolve(html2canvas);
+    if (html2canvasReadyPromise) return html2canvasReadyPromise;
 
-      const script = document.createElement('script');
-      script.src = chrome.runtime.getURL('lib/html2canvas.min.js');
-      script.onload = resolve;
-      script.onerror = reject;
-      document.head.appendChild(script);
-    });
+    // html2canvas is shipped as a declared content script (manifest). If it's missing,
+    // surface an explicit error so the user can reload the extension.
+    html2canvasReadyPromise = Promise.reject(new Error('html2canvas is not available in this page. Reload the extension and retry.'));
+    return html2canvasReadyPromise;
   }
 
   // Check if we're on a Grafana page
@@ -398,5 +520,6 @@
 
   // Initialize
   console.log('Grafana Panel Screenshot: Content script loaded');
+  ensureMonitoringStarted();
 
 })();

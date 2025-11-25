@@ -26,7 +26,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://*/*"],
+      "matches": ["<all_urls>"],
       "js": ["lib/html2canvas.min.js", "content/content.js"],
       "css": ["content/content.css"],
       "run_at": "document_idle"
@@ -35,7 +35,7 @@
   "web_accessible_resources": [
     {
       "resources": ["lib/html2canvas.min.js"],
-      "matches": ["*://*/*"]
+      "matches": ["<all_urls>", "file://*/*"]
     }
   ],
   "icons": {
